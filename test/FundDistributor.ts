@@ -12,9 +12,11 @@ describe("FundDistributor", function () {
     const [owner, otherAccount] = await ethers.getSigners();
     const tempBalance = 1000;
     const FundDistributor = await ethers.getContractFactory("FundDistributor");
+    const TestToken = await ethers.getContractFactory("TestToken");
     const distributor = await FundDistributor.deploy({ value: tempBalance });
+    const testToken = await TestToken.deploy(ethers.utils.parseEther("1000"));
 
-    return { distributor, owner, otherAccount, tempBalance };
+    return { distributor, owner, otherAccount, tempBalance, testToken };
   }
 
   describe("Deployment", function () {
@@ -72,7 +74,7 @@ describe("FundDistributor", function () {
       it("should revert if no receivers are sent", async () => {
         const { distributor } = await loadFixture(deployFixture);
         await expect(
-          distributor.distribute([], ethers.utils.parseEther("1.0"))
+          distributor.distribute(ethers.utils.parseEther("1.0"), [])
         ).to.be.revertedWith("No receivers");
       });
 
@@ -80,8 +82,8 @@ describe("FundDistributor", function () {
         const { distributor, otherAccount } = await loadFixture(deployFixture);
         await expect(
           distributor.distribute(
-            [otherAccount.getAddress()],
             ethers.utils.parseEther("1.0"),
+            [otherAccount.getAddress()],
             {
               value: ethers.utils.parseEther("0.9"),
             }
@@ -92,10 +94,9 @@ describe("FundDistributor", function () {
       it("should revert if amount sent is zero", async () => {
         const { distributor, otherAccount } = await loadFixture(deployFixture);
         await expect(
-          distributor.distribute(
-            [otherAccount.getAddress()],
-            ethers.utils.parseEther("0")
-          )
+          distributor.distribute(ethers.utils.parseEther("0"), [
+            otherAccount.getAddress(),
+          ])
         ).to.be.revertedWith("Invalid amount per receiver");
       });
 
@@ -103,8 +104,8 @@ describe("FundDistributor", function () {
         const { distributor, otherAccount } = await loadFixture(deployFixture);
         await expect(
           distributor.distribute(
-            [otherAccount.getAddress()],
             ethers.utils.parseEther("1.0"),
+            [otherAccount.getAddress()],
             {
               value: ethers.utils.parseEther("1"),
             }
@@ -124,7 +125,7 @@ describe("FundDistributor", function () {
           otherAccount.getAddress(),
         ]);
         await expect(
-          distributor.distribute([otherAccountAddress], amount, {
+          distributor.distribute(amount, [otherAccountAddress], {
             value: amount,
           })
         )
@@ -138,8 +139,8 @@ describe("FundDistributor", function () {
         const { distributor, otherAccount } = await loadFixture(deployFixture);
         await expect(
           distributor.distribute(
-            [otherAccount.getAddress()],
             ethers.utils.parseEther("1.0"),
+            [otherAccount.getAddress()],
             {
               value: ethers.utils.parseEther("1"),
             }
@@ -148,6 +149,110 @@ describe("FundDistributor", function () {
           [otherAccount],
           [ethers.utils.parseEther("1.0")]
         );
+      });
+    });
+  });
+
+  describe("DistributeTokens", () => {
+    describe("Validations", () => {
+      it("should revert if no receivers are sent", async () => {
+        const { distributor, testToken } = await loadFixture(deployFixture);
+        await expect(
+          distributor.distributeTokens(
+            ethers.utils.parseEther("1.0"),
+            testToken.address,
+            []
+          )
+        ).to.be.revertedWith("No receivers");
+      });
+
+      it("should revert if amount send is not enough", async () => {
+        const { distributor, otherAccount, testToken, owner } =
+          await loadFixture(deployFixture);
+        const currentBalance = await testToken.balanceOf(owner.getAddress());
+        await testToken.transfer(otherAccount.getAddress(), currentBalance);
+        await expect(
+          distributor.distributeTokens(
+            ethers.utils.parseEther("1.0"),
+            testToken.address,
+            [otherAccount.getAddress()]
+          )
+        ).to.be.revertedWith("Insufficient amount");
+      });
+
+      it("should revert if amount sent is zero", async () => {
+        const { distributor, otherAccount, testToken } = await loadFixture(
+          deployFixture
+        );
+        await expect(
+          distributor.distributeTokens(
+            ethers.utils.parseEther("0"),
+            testToken.address,
+            [otherAccount.getAddress()]
+          )
+        ).to.be.revertedWith("Invalid amount per receiver");
+      });
+    });
+
+    describe("Events", () => {
+      it("should emit DistributeTokens event", async () => {
+        const { distributor, owner, otherAccount, testToken } =
+          await loadFixture(deployFixture);
+        const amount = ethers.utils.parseEther("1.0");
+        const [ownerAddress, otherAccountAddress] = await Promise.all([
+          owner.getAddress(),
+          otherAccount.getAddress(),
+        ]);
+
+        await testToken.approve(distributor.address, amount);
+
+        await expect(
+          distributor.distributeTokens(amount, testToken.address, [
+            otherAccountAddress,
+          ])
+        )
+          .to.emit(distributor, "DistributeTokens")
+          .withArgs(ownerAddress, testToken.address, amount, [
+            otherAccountAddress,
+          ]);
+      });
+
+      it("should emit ERC20 Transfer event", async () => {
+        const { distributor, owner, otherAccount, testToken } =
+          await loadFixture(deployFixture);
+        const amount = ethers.utils.parseEther("1.0");
+        const [ownerAddress, otherAccountAddress] = await Promise.all([
+          owner.getAddress(),
+          otherAccount.getAddress(),
+        ]);
+
+        await testToken.approve(distributor.address, amount);
+
+        await expect(
+          distributor.distributeTokens(amount, testToken.address, [
+            otherAccountAddress,
+          ])
+        )
+          .to.emit(testToken, "Transfer")
+          .withArgs(ownerAddress, otherAccountAddress, amount);
+      });
+    });
+
+    describe("Transfers", () => {
+      it("should update other account balance", async () => {
+        const { distributor, otherAccount, testToken } = await loadFixture(
+          deployFixture
+        );
+        const amount = ethers.utils.parseEther("1.0");
+        await testToken.approve(distributor.address, amount);
+        await distributor.distributeTokens(
+          ethers.utils.parseEther("1.0"),
+          testToken.address,
+          [otherAccount.getAddress()]
+        );
+
+        const balance = await testToken.balanceOf(otherAccount.getAddress());
+        await expect(balance.toString()).to.be.eql(amount.toString());
       });
     });
   });

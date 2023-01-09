@@ -19,6 +19,13 @@ const config: HardhatUserConfig = {
       },
       chainId: 5700,
     },
+    nevm: {
+      url: "https://rpc.syscoin.org",
+      accounts: {
+        mnemonic: process.env.MNEMONIC,
+      },
+      chainId: 57,
+    },
   },
 };
 
