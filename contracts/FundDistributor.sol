@@ -21,6 +21,9 @@ contract FundDistributor {
         address payable[] receivers
     );
 
+    event Received(address, uint256);
+    event Fallbacked(address, uint256);
+
     constructor() payable {
         owner = payable(msg.sender);
     }
@@ -30,13 +33,22 @@ contract FundDistributor {
         _;
     }
 
+    receive() external payable {
+        emit Received(msg.sender, msg.value);
+    }
+
+    fallback() external payable {
+        emit Fallbacked(msg.sender, msg.value);
+    }
+
     function transferOwnership(address payable newOwner) public isOwner {
         owner = newOwner;
         emit TransferOwnership(newOwner);
     }
 
-    function withdraw() public isOwner {
-        owner.transfer(address(this).balance);
+    function withdraw() public payable isOwner {
+        (bool sent, bytes memory data) = owner.call{value: address(this).balance}("");
+        require(sent, "Failed to send Ether");
         emit Withdrawal(address(this).balance, block.timestamp);
     }
 
@@ -60,7 +72,8 @@ contract FundDistributor {
 
         for (uint256 i = 0; i < receivers.length; i++) {
             address payable receiver = receivers[i];
-            receiver.transfer(amountPerReceiver);
+            (bool sent, bytes memory data) = receiver.call{value: amountPerReceiver}("");
+            require(sent, "Failed to send Ether");
         }
 
         emit Distribute(msg.sender, amountPerReceiver, receivers);
