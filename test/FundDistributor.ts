@@ -142,7 +142,7 @@ describe("FundDistributor", function () {
             ethers.utils.parseEther("1.0"),
             [otherAccount.getAddress()],
             {
-              value: ethers.utils.parseEther("1"),
+            value: ethers.utils.parseEther("1"),
             }
           )
         ).to.changeEtherBalances(

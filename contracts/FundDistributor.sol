@@ -47,7 +47,7 @@ contract FundDistributor {
     }
 
     function withdraw() public payable isOwner {
-        (bool sent, bytes memory data) = owner.call{value: address(this).balance}("");
+        (bool sent, ) = owner.call{value: address(this).balance}("");
         require(sent, "Failed to send Ether");
         emit Withdrawal(address(this).balance, block.timestamp);
     }
@@ -72,7 +72,7 @@ contract FundDistributor {
 
         for (uint256 i = 0; i < receivers.length; i++) {
             address payable receiver = receivers[i];
-            (bool sent, bytes memory data) = receiver.call{value: amountPerReceiver}("");
+            (bool sent, ) = receiver.call{value: amountPerReceiver}("");
             require(sent, "Failed to send Ether");
         }
 
